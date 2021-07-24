@@ -1,0 +1,50 @@
+name: deploy
+
+on: [deployment]
+
+env:
+  RELEASE_REVISION: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  HELM_VERSION: "v2.12.2"
+  # For now hardcoded but we can setup using terraform and secrets
+  KUBE_NAMESPACE: service
+  # ECR repository is the same name as the git repository
+  ECR_REPOSITORY: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deployment pending
+      uses: deliverybot/deployment-status@v1
+      with:
+        state: pending
+        token: ${{ github.token }}
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Cache Go Dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+    
+    - name: Setup Helm
+      run: |
+        curl -sSL https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz | tar xz && sudo mv linux-amd64/helm /usr/local/bin/helm && rm -rf linux-amd64
+        helm version --client
+        helm init --client-only --stable-repo-url https://charts.helm.sh/stable
+    - name: Deployment success
+      if: success()
+      uses: deliverybot/deployment-status@v1
+      with:
+        state: success
+        token: ${{ github.token }}
+
+    - name: Deployment failure
+      if: failure()
+      uses: deliverybot/deployment-status@v1
+      with:
+        state: failure
+        token: ${{ github.token }}
